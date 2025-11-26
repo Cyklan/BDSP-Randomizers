@@ -8,31 +8,49 @@ from AdditionalMods import truesize, weatherRemove, hgssWalkSpeed
 from Utilities import GlobalGameManager
 import AtmospherePaths
 
-from os import error, path, remove, getcwd, chdir
+from os import error, path, remove, getcwd, chdir, mkdir
 from math import isclose
 import shutil
 import sys
 import traceback
 import subprocess
+import configparser
 
 class AppWindow(QMainWindow):
     
     atmospherePath = "atmosphereRandomized"
     emulatorPath = "emulatorRandomized"
     pathList = (atmospherePath, emulatorPath)
+    romfs_bd = ""
+    romfs_sp = ""
+
+    save_bd = ""
+    save_sp = ""
+
+    mods_bd = ""
+    mods_sp = ""
     
     def __init__(self):
         super().__init__()
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.ui.btnRandomize.clicked.connect(self.buttonClicked)
-    
-    def buttonClicked(self):
-        #setup directory where romFS Tok modify is. 
-        dialog = QFileDialog()
-        global romFSPath
-        romFSPath = dialog.getExistingDirectory(self, 'Select ROMFS path')
+
+        config = configparser.ConfigParser()
+        config.read("rando.ini")
         
+        self.romfs_bd = config["ROMFS"]["brilliant_diamond"]
+        self.romfs_sp = config["ROMFS"]["shining_pearl"]
+
+        self.save_bd = config["SAVE_DIRS"]["brilliant_diamond"]
+        self.save_sp = config["SAVE_DIRS"]["shining_pearl"]
+
+        self.mods_bd = config["MOD_DIRS"]["brilliant_diamond"]
+        self.mods_sp = config["MOD_DIRS"]["shining_pearl"]
+
+    def randomize(self, game):
+        global romFSPath
+
         if path.exists(path.join(romFSPath, "Data")):
             romFSPath = path.join(romFSPath, "Data")
             
@@ -134,11 +152,12 @@ class AppWindow(QMainWindow):
                 if path.exists(file):
                     remove(file)
                     
-            ##Copies files generated for Yuzu into a path generated for Atmosphere
-            AtmospherePaths.MovePath(self.ui.tbLog)
-                    
             if path.exists("mods"):
-                subprocess.Popen('explorer "mods"')
+                if game == "bd":
+                    # todo: copy dirs in mods into self.modsBD
+                    self.write_mods(self.mods_bd)
+                elif game == "sp":
+                    self.write_mods(self.mods_sp)
                 
             chdir(cwd)
                 
@@ -153,6 +172,51 @@ class AppWindow(QMainWindow):
         #        Levels.RandomizeLevels(self.ui.tbLog,1, self.ui.sbMin.value(), self.ui.sbMax.value())
         #    else:
         #        Levels.RandomizeLevels(self.ui.tbLog,0, self.ui.sbMin.value(), self.ui.sbMax.value())
+
+    def write_mods(self, mod_path):
+        cwd = getcwd()
+        romfs_mod_path = path.join(cwd, "mods/emulatorRandomized", "romfs")
+        exefs_mod_path = path.join(cwd, "mods/emulatorRandomized", "exefs")
+
+        starters_mod_path = path.join(mod_path, "Starters")
+        randomizer_mod_path = path.join(mod_path, "Randomizer")
+
+        if path.exists(starters_mod_path):
+            shutil.rmtree(starters_mod_path)
+        
+        if path.exists(randomizer_mod_path):
+            shutil.rmtree(randomizer_mod_path)
+        
+        mkdir(starters_mod_path)
+        mkdir(randomizer_mod_path)
+
+        shutil.copytree(romfs_mod_path, path.join(randomizer_mod_path, "romfs"))
+        shutil.copytree(exefs_mod_path, path.join(starters_mod_path, "exefs"))
+
+    def write_save_games(self):
+        self.ui.tbLog.append('Resetting Saves!')
+        cwd = getcwd()
+        shutil.rmtree(self.save_bd)
+        shutil.rmtree(self.save_sp)
+        shutil.copytree(path.join(cwd, "saves", "bd"), self.save_bd)
+        shutil.copytree(path.join(cwd, "saves", "sp"), self.save_sp)
+
+    
+    def buttonClicked(self):
+        #setup directory where romFS Tok modify is. 
+        self.ui.tbLog.append('Starting...\n')
+        global romFSPath
+        romFSPath = self.romfs_bd
+        self.randomize("bd")
+
+        romFSPath = self.romfs_sp
+        self.randomize("sp")
+
+        self.write_save_games()
+        self.ui.tbLog.append('All done!')
+        
+
+        
 
 app = QApplication(sys.argv)
 
